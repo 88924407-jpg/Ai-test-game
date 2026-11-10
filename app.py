@@ -1,6 +1,9 @@
+# app.py
 import streamlit as st
 import random
 import time
+from data import ITEM_ENCYCLOPEDIA, DEFAULT_RECIPES
+from components import inventory_modal
 
 # Page configuration
 st.set_page_config(
@@ -9,94 +12,37 @@ st.set_page_config(
     layout="wide"
 )
 
-# Custom CSS for earthy theme, styling, and 'q' key listener injection
-st.markdown("""
-<style>
-    .stApp {
-        background-color: #F5EBDC;
-        color: #32281E;
-    }
-    h1, h2, h3 {
-        color: #78552D !important;
-        font-family: Arial, sans-serif;
-    }
-    /* Style the native sidebar to be pastel blue */
-    [data-testid="stSidebar"] {
-        background-color: #E3EEF8;
-        border-right: 2px solid #A2C4E0;
-    }
-    [data-testid="stSidebar"] h3, [data-testid="stSidebar"] h4, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {
-        color: #1A365D !important;
-    }
-    .stButton>button {
-        background-color: #78552D;
-        color: white;
-        border-radius: 8px;
-        border: none;
-        padding: 10px 24px;
-        font-weight: bold;
-        width: 100%;
-    }
-    .stButton>button:hover {
-        background-color: #B46E32;
-        color: white;
-    }
-    .item-shadow {
-        color: rgba(0, 0, 0, 0.25);
-        text-shadow: 0px 0px 8px rgba(0, 0, 0, 0.3);
-        filter: blur(1.5px);
-        user-select: none;
-    }
-    .craft-node {
-        background-color: #EEDCC5;
-        border: 2px solid #B46E32;
-        border-radius: 10px;
-        padding: 15px;
-        margin-bottom: 10px;
-    }
-</style>
-
-<!-- JavaScript Hotkey Listener: Press 'q' to open Admin Panel -->
-<script>
-    document.addEventListener('keydown', function(event) {
-        // Only trigger if not typing inside an input or textarea
-        if (event.key.toLowerCase() === 'q' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
-            event.preventDefault();
-            // Trigger streamlit rerun by navigating with query param
-            const url = new URL(window.location.href);
-            url.searchParams.set('admin_mode', 'true');
-            window.location.href = url.toString();
-        }
-    });
-</script>
-""", unsafe_allow_html=True)
-
 # Initialize Session State variables
 if "state" not in st.session_state:
     st.session_state.state = "MENU"
 
 if "inventory" not in st.session_state:
     st.session_state.inventory = {
-        "Dirt": 0, "Worms": 0, "Roots": 0, "Pebbles": 0,
+        "Dirt": 0, "Worms": 0, "Roots": 0, "Pebbles": 0, "Coal": 0,
         "Soil": 0, "Old Carrots": 0, "Dead Flower": 0,
-        "Fresh Carrots": 0, "Roses": 0, "Perfect Soil": 0,
-        "Compound Dirt": 0, "Fine dirt": 0, 
+        "Fresh Carrots": 0, "Roses": 0, "Perfect Soil": 0, "Metal Fragments": 0,
+        "Compound Dirt": 0, "Fine dirt": 0, "Molten Metal": 0,
         "Pebble Axe": 0, "Stone Oven": 0
     }
 
 if "recipes" not in st.session_state:
-    st.session_state.recipes = {
-        "Compound Dirt": {"Dirt": 3, "Worms": 2},
-        "Fine dirt": {"alternatives": [{"Soil": 5}, {"Perfect Soil": 1}]},
-        "Pebble Axe": {"Pebbles": 4, "Roots": 3},
-        "Stone Oven": {"Fine dirt": 2, "Pebbles": 10}
-    }
+    st.session_state.recipes = DEFAULT_RECIPES
 
 if "tool_boosters" not in st.session_state:
     st.session_state.tool_boosters = {
         "Pebble Axe": {"level": 1, "multiplier": 2},
         "Stone Oven": {"level": 1, "multiplier": 1}
     }
+
+if "ui_settings" not in st.session_state:
+    st.session_state.ui_settings = {
+        "bg_color": "#FEF3C7",
+        "text_color": "#92400E",
+        "border_color": "#F59E0B"
+    }
+
+if "item_custom_colors" not in st.session_state:
+    st.session_state.item_custom_colors = {item: data.get("color", "#F0F0F0") for item, data in ITEM_ENCYCLOPEDIA.items()}
 
 if "show_inventory_modal" not in st.session_state:
     st.session_state.show_inventory_modal = False
@@ -122,171 +68,133 @@ if "show_actions" not in st.session_state:
 if "selected_item" not in st.session_state:
     st.session_state.selected_item = None
 
-# Enhanced item registry with icons, descriptions, and uses
-ITEM_ENCYCLOPEDIA = {
-    "Dirt": {
-        "rarity": "Common", "category": "material", "icon": "🟤",
-        "description": "Basic earthy dirt collected from cave floors.",
-        "use": "Used as a basic building block for crafting Compound Dirt."
-    },
-    "Worms": {
-        "rarity": "Common", "category": "material", "icon": "🐛",
-        "description": "Squirmy little underground critters.",
-        "use": "Bait used alongside Dirt to compound rich terrain."
-    },
-    "Roots": {
-        "rarity": "Common", "category": "material", "icon": "🌿",
-        "description": "Fibrous and tough plant fibers.",
-        "use": "Used as binding material to tie tools like the Pebble Axe together."
-    },
-    "Pebbles": {
-        "rarity": "Common", "category": "material", "icon": "🪨",
-        "description": "Hard stone fragments found while digging.",
-        "use": "Used for heavy construction and blunt tools."
-    },
-    "Soil": {
-        "rarity": "Uncommon", "category": "material", "icon": "🪴",
-        "description": "Nutrient-rich dark earth.",
-        "use": "Accumulate 5 to craft Fine dirt."
-    },
-    "Old Carrots": {
-        "rarity": "Uncommon", "category": "food", "icon": "🥕",
-        "description": "Shriveled and old cave roots.",
-        "use": "Can be snacked on or traded later."
-    },
-    "Dead Flower": {
-        "rarity": "Uncommon", "category": "material", "icon": "🥀",
-        "description": "Faded flora with botanical potential.",
-        "use": "Can be studied or used in crafting recipes."
-    },
-    "Fresh Carrots": {
-        "rarity": "Rare", "category": "food", "icon": "🥕",
-        "description": "Crisp and delicious cave harvest.",
-        "use": "Provides high nourishment and trade value."
-    },
-    "Roses": {
-        "rarity": "Rare", "category": "material", "icon": "🌹",
-        "description": "Fragrant and beautiful rare flora.",
-        "use": "Admire its beauty or trade for rare goods."
-    },
-    "Perfect Soil": {
-        "rarity": "Rare", "category": "material", "icon": "✨",
-        "description": "Pristine, glowing earth.",
-        "use": "Instantly fulfills Fine dirt recipe requirements and unlocks the crafting tree!"
-    },
-    "Compound Dirt": {
-        "rarity": "Crafted", "category": "crafted", "icon": "🧱",
-        "description": "An upgraded composite soil block.",
-        "use": "Used for sturdy underground foundations."
-    },
-    "Fine dirt": {
-        "rarity": "Crafted", "category": "crafted", "icon": "🟫",
-        "description": "Ultra-smooth silt.",
-        "use": "Primary foundation for building high-tier stone structures like the Stone Oven."
-    },
-    "Pebble Axe": {
-        "rarity": "Crafted", "category": "tool", "icon": "🪓",
-        "description": "A crude stone axe tied with roots.",
-        "use": "Passive Tool: Permanently multiplies materials harvested when digging!"
-    },
-    "Stone Oven": {
-        "rarity": "Crafted", "category": "tool", "icon": "🔥",
-        "description": "A hearth built from fine dirt and pebbles.",
-        "use": "Culinary Station: Unlocks heat processing and advanced cave baking."
-    }
-}
+# Custom CSS with fixed tooltip sizing and appearance
+ui = st.session_state.ui_settings
+st.markdown(f"""
+<style>
+    .stApp {{
+        background-color: #F5EBDC;
+        color: #32281E;
+    }}
+    h1, h2, h3 {{
+        color: #78552D !important;
+        font-family: Arial, sans-serif;
+    }}
+    [data-testid="stSidebar"] {{
+        background-color: #E3EEF8;
+        border-right: 2px solid #A2C4E0;
+    }}
+    [data-testid="stSidebar"] h3, [data-testid="stSidebar"] h4, [data-testid="stSidebar"] p, [data-testid="stSidebar"] span {{
+        color: #1A365D !important;
+    }}
+    .stButton>button {{
+        background-color: #78552D;
+        color: white;
+        border-radius: 8px;
+        border: none;
+        padding: 10px 24px;
+        font-weight: bold;
+        width: 100%;
+    }}
+    .stButton>button:hover {{
+        background-color: #B46E32;
+        color: white;
+    }}
+    .item-shadow {{
+        color: rgba(0, 0, 0, 0.25);
+        text-shadow: 0px 0px 8px rgba(0, 0, 0, 0.3);
+        filter: blur(1.5px);
+        user-select: none;
+    }}
+    .craft-node {{
+        background-color: #EEDCC5;
+        border: 2px solid #B46E32;
+        border-radius: 10px;
+        padding: 15px;
+        margin-bottom: 10px;
+    }}
+    .dig-popup {{
+        background-color: {ui['bg_color']};
+        color: {ui['text_color']};
+        border: 2px solid {ui['border_color']};
+        padding: 12px 18px;
+        border-radius: 10px;
+        font-size: 1.15rem;
+        font-weight: bold;
+        text-align: center;
+        box-shadow: 0px 4px 6px rgba(0,0,0,0.1);
+        margin-top: 5px;
+    }}
+    /* Fixed Tooltip styling to prevent empty boxes */
+    .recipe-tooltip {{
+        position: relative;
+        display: block;
+        cursor: pointer;
+    }}
+    .recipe-tooltip .tooltip-text {{
+        visibility: hidden;
+        width: 230px;
+        background-color: #1A365D;
+        color: #fff;
+        text-align: left;
+        border-radius: 6px;
+        padding: 10px;
+        position: absolute;
+        z-index: 999;
+        bottom: 125%;
+        left: 0;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+        transition-delay: 0.5s;
+        font-size: 0.85rem;
+        box-shadow: 0px 4px 8px rgba(0,0,0,0.3);
+        pointer-events: none;
+    }}
+    .recipe-tooltip:hover .tooltip-text {{
+        visibility: visible;
+        opacity: 1;
+    }}
+</style>
+""", unsafe_allow_html=True)
 
-def set_top_right_message(text):
+# JavaScript Hotkey Listener
+st.markdown("""
+<script>
+    document.addEventListener('keydown', function(event) {
+        if (event.key.toLowerCase() === 'q' && document.activeElement.tagName !== 'INPUT' && document.activeElement.tagName !== 'TEXTAREA') {
+            event.preventDefault();
+            const url = new URL(window.location.href);
+            url.searchParams.set('admin_mode', 'true');
+            window.location.href = url.toString();
+        }
+    });
+</script>
+""", unsafe_allow_html=True)
+
+def set_notification(text):
     st.session_state.message = text
-    st.session_state.message_expiry = time.time() + 2.0
+    st.session_state.message_expiry = time.time() + 2.5
 
 def perform_dig():
     tool_mult = st.session_state.tool_boosters.get("Pebble Axe", {}).get("multiplier", 2) if st.session_state.inventory.get("Pebble Axe", 0) > 0 else 1
     roll = random.random()
-    if roll < 0.50:
+    if roll < 0.40:
         item = random.choice(["Dirt", "Worms", "Roots"])
-    elif roll < 0.75:
-        item = "Pebbles"
-    elif roll < 0.90:
+    elif roll < 0.65:
+        item = random.choice(["Pebbles", "Coal"])
+    elif roll < 0.85:
         item = random.choice(["Soil", "Old Carrots", "Dead Flower"])
     else:
-        item = random.choice(["Fresh Carrots", "Roses", "Perfect Soil"])
+        item = random.choice(["Fresh Carrots", "Roses", "Perfect Soil", "Metal Fragments"])
         
     st.session_state.inventory[item] += tool_mult
+    meta = ITEM_ENCYCLOPEDIA.get(item, {"icon": "📦"})
+    icon = meta["icon"]
+    
     if tool_mult > 1:
-        set_top_right_message(f"+{tool_mult}x {item} (Tool Booster!)")
+        set_notification(f"✨ +{tool_mult}x {icon} {item} (Tool Boost!)")
     else:
-        set_top_right_message(f"+1 {item}")
-
-# Define Inventory Modal using Streamlit's native dialog decorator
-@st.dialog("🎒 Backpack Inventory", width="large")
-def inventory_modal():
-    # Category Tabs
-    tab_cols = st.columns(5)
-    categories = [("all", "All"), ("material", "Materials"), ("food", "Food"), ("crafted", "Crafted"), ("tool", "Tools")]
-    for i, (cat_key, cat_label) in enumerate(categories):
-        with tab_cols[i]:
-            if st.button(cat_label, key=f"tab_btn_{cat_key}"):
-                st.session_state.inv_tab = cat_key
-                st.rerun()
-
-    st.markdown("---")
-
-    # Sorting Controls
-    sort_col1, sort_col2 = st.columns(2)
-    with sort_col1:
-        st.session_state.inv_sort_by = st.selectbox("Sort by", ["Rarity", "Name", "Amount"], key="sort_by_select")
-    with sort_col2:
-        st.session_state.inv_sort_order = st.selectbox("Order", ["Standard (Ascending)", "Reverse (Descending)"], key="sort_order_select")
-
-    st.markdown("---")
-
-    # Filter and Sort Items (Only show discovered items with count > 0)
-    items_to_display = []
-    rarity_weight = {"Common": 1, "Uncommon": 2, "Rare": 3, "Crafted": 4}
-
-    for item_name, count in st.session_state.inventory.items():
-        if count <= 0:
-            continue
-            
-        meta = ITEM_ENCYCLOPEDIA.get(item_name, {"rarity": "Common", "category": "material", "icon": "📦", "description": "Unknown item.", "use": "Unknown use."})
-        if st.session_state.inv_tab != "all" and meta["category"] != st.session_state.inv_tab:
-            continue
-        items_to_display.append({
-            "name": item_name,
-            "count": count,
-            "rarity": meta["rarity"],
-            "rarity_weight": rarity_weight.get(meta["rarity"], 1),
-            "icon": meta["icon"],
-            "description": meta["description"],
-            "use": meta["use"]
-        })
-
-    # Apply Sorting
-    reverse_bool = "Reverse" in st.session_state.inv_sort_order
-    if st.session_state.inv_sort_by == "Name":
-        items_to_display.sort(key=lambda x: x["name"], reverse=reverse_bool)
-    elif st.session_state.inv_sort_by == "Amount":
-        items_to_display.sort(key=lambda x: x["count"], reverse=reverse_bool)
-    else: # Rarity
-        items_to_display.sort(key=lambda x: x["rarity_weight"], reverse=reverse_bool)
-
-    # Render Grid using Streamlit Buttons
-    if not items_to_display:
-        st.info("No discovered items in this category yet. Go dig in the cave!")
-    else:
-        cols_per_row = 4
-        rows = [items_to_display[i:i + cols_per_row] for i in range(0, len(items_to_display), cols_per_row)]
-        
-        for row in rows:
-            cols = st.columns(cols_per_row)
-            for idx, item in enumerate(row):
-                with cols[idx]:
-                    button_label = f"{item['icon']} {item['name']}\n📦 x{item['count']}"
-                    if st.button(button_label, key=f"inv_click_{item['name']}", help=f"{item['description']}\n\nUse: {item['use']}"):
-                        st.session_state.selected_item = item['name']
-                        st.session_state.show_inventory_modal = False
-                        st.rerun()
+        set_notification(f"✨ +1 {icon} {item}")
 
 # Router
 if st.session_state.state == "MENU":
@@ -297,12 +205,34 @@ if st.session_state.state == "MENU":
         if st.button("Play Now"):
             st.session_state.state = "TUTORIAL"
             st.rerun()
+        if st.button("Interface Settings"):
+            st.session_state.state = "SETTINGS"
+            st.rerun()
         if st.button("Audio"):
             st.session_state.state = "AUDIO"
             st.rerun()
         if st.button("Performance"):
             st.session_state.state = "PERFORMANCE"
             st.rerun()
+
+elif st.session_state.state == "SETTINGS":
+    st.markdown("<h1>⚙️ Interface & Material Color Settings</h1>", unsafe_allow_html=True)
+    st.markdown("Customize your general notification highlights and individual item background colors.")
+    st.markdown("---")
+    
+    st.session_state.ui_settings["bg_color"] = st.color_picker("Notification Highlight Background Color", st.session_state.ui_settings["bg_color"])
+    st.session_state.ui_settings["text_color"] = st.color_picker("Notification Text Color", st.session_state.ui_settings["text_color"])
+    st.session_state.ui_settings["border_color"] = st.color_picker("Notification Border Color", st.session_state.ui_settings["border_color"])
+
+    st.markdown("### 🎨 Individual Material Card Colors")
+    for item_name in ITEM_ENCYCLOPEDIA:
+        curr_color = st.session_state.item_custom_colors.get(item_name, "#F0F0F0")
+        st.session_state.item_custom_colors[item_name] = st.color_picker(f"Background color for {item_name}", curr_color, key=f"color_picker_{item_name}")
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+    if st.button("← Back to Menu"):
+        st.session_state.state = "MENU"
+        st.rerun()
 
 elif st.session_state.state == "TUTORIAL":
     st.markdown("<h1>🦴 Welcome to Caveman Tycoon — Tutorial</h1>", unsafe_allow_html=True)
@@ -316,7 +246,6 @@ elif st.session_state.state == "ADMIN":
     st.markdown("Manage resources, custom recipes, tool boosters, and global unlocks.")
     st.markdown("---")
 
-    # Global Actions
     col_g1, col_g2 = st.columns(2)
     with col_g1:
         if st.button("✨ Unlock All Items & Crafting Tree"):
@@ -333,8 +262,6 @@ elif st.session_state.state == "ADMIN":
             st.rerun()
 
     st.markdown("---")
-
-    # Tabs for Admin Features
     admin_tab1, admin_tab2, admin_tab3 = st.tabs(["📦 Give Items & Inventory", "⚡ Tool Boosters (Lv. 1-100)", "🧪 Custom Recipes"])
 
     with admin_tab1:
@@ -356,8 +283,6 @@ elif st.session_state.state == "ADMIN":
             st.markdown(f"#### 🛠️ {tool_name}")
             curr_lvl = st.session_state.tool_boosters[tool_name]["level"]
             new_lvl = st.slider(f"Level for {tool_name}", 1, 100, value=curr_lvl, key=f"slider_lvl_{tool_name}")
-            
-            # Auto scale multiplier based on level
             calculated_mult = new_lvl * 2
             st.session_state.tool_boosters[tool_name]["level"] = new_lvl
             st.session_state.tool_boosters[tool_name]["multiplier"] = calculated_mult
@@ -381,7 +306,7 @@ elif st.session_state.state == "ADMIN":
             if submit_recipe and new_recipe_name:
                 ITEM_ENCYCLOPEDIA[new_recipe_name] = {
                     "rarity": new_item_rarity, "category": "crafted", "icon": new_item_icon,
-                    "description": new_item_desc, "use": new_item_use
+                    "description": new_item_desc, "use": new_item_use, "color": "#E0E0E0"
                 }
                 if new_recipe_name not in st.session_state.inventory:
                     st.session_state.inventory[new_recipe_name] = 0
@@ -406,17 +331,12 @@ elif st.session_state.state == "PERFORMANCE":
         st.rerun()
 
 elif st.session_state.state == "PLAYING":
-    # Check if 'q' key hotkey was pressed via query params
     if st.query_params.get("admin_mode") == "true":
         st.query_params.clear()
         st.session_state.state = "ADMIN"
         st.rerun()
 
-    # Top-right header bar for notifications and menu button
     col_top_left, col_top_right = st.columns([3, 2])
-    with col_top_left:
-        if st.session_state.message and time.time() < st.session_state.message_expiry:
-            st.markdown(f"<div style='text-align: left; font-weight: bold; color: #B45309; padding-top: 8px;'>✨ {st.session_state.message}</div>", unsafe_allow_html=True)
     with col_top_right:
         if st.button("🏠 Menu"):
             st.session_state.state = "MENU"
@@ -426,7 +346,6 @@ elif st.session_state.state == "PLAYING":
             
     st.markdown("---")
     
-    # Pastel Blue Recipe Sidebar
     with st.sidebar:
         st.markdown("### 📜 Recipe Book & Crafting")
         st.markdown("---")
@@ -438,14 +357,45 @@ elif st.session_state.state == "PLAYING":
         has_found_pebbles = st.session_state.inventory.get("Pebbles", 0) > 0
         has_crafted_pebble_axe = st.session_state.inventory.get("Pebble Axe", 0) > 0
         pebble_axe_unlocked = has_found_pebbles or has_crafted_pebble_axe
+
+        has_stone_oven = st.session_state.inventory.get("Stone Oven", 0) > 0
         
         for recipe_name, recipe_data in st.session_state.recipes.items():
             if recipe_name == "Fine dirt" and not fine_dirt_unlocked:
                 continue
             if recipe_name == "Pebble Axe" and not pebble_axe_unlocked:
                 continue
+            if recipe_name == "Molten Metal" and not has_stone_oven:
+                continue
                 
-            st.markdown(f"#### 🧪 {recipe_name}")
+            # Build recipe lines with check marks (✔) and crosses (❌) based on inventory
+            tooltip_lines = []
+            if "alternatives" in recipe_data:
+                alt_block = []
+                for alt in recipe_data["alternatives"]:
+                    sub_lines = []
+                    for ing, req_amt in alt.items():
+                        owned = st.session_state.inventory.get(ing, 0)
+                        symbol = "✔" if owned >= req_amt else "❌"
+                        sub_lines.append(f"{symbol} {req_amt}x {ing} (Have: {owned})")
+                    alt_block.append(" or ".join(sub_lines))
+                tooltip_lines.append(" / ".join(alt_block))
+            else:
+                for ing, req_amt in recipe_data.items():
+                    owned = st.session_state.inventory.get(ing, 0)
+                    symbol = "✔" if owned >= req_amt else "❌"
+                    tooltip_lines.append(f"{symbol} {req_amt}x {ing} (Have: {owned})")
+            
+            recipe_string = "<br>".join(tooltip_lines)
+
+            # Render item title with hover tooltip wrapper
+            st.markdown(f"""
+                <div class="recipe-tooltip">
+                    <h4 style="margin-bottom: 2px;">🧪 {recipe_name}</h4>
+                    <div class="tooltip-text"><b>Recipe Requirements:</b><br>{recipe_string}</div>
+                </div>
+            """, unsafe_allow_html=True)
+
             can_craft = False
             chosen_option = None
             
@@ -472,25 +422,23 @@ elif st.session_state.state == "PLAYING":
                     if recipe_name not in st.session_state.inventory:
                         st.session_state.inventory[recipe_name] = 0
                     st.session_state.inventory[recipe_name] += 1
-                    set_top_right_message(f"Crafted {recipe_name}!")
+                    meta = ITEM_ENCYCLOPEDIA.get(recipe_name, {"icon": "📦"})
+                    set_notification(f"🎉 Crafted {meta['icon']} {recipe_name}!")
                     st.session_state.show_inventory_modal = False
                     st.rerun()
             else:
                 st.markdown("<span style='color: #9B2C2C; font-weight: bold;'>Missing Ingredients ❌</span>", unsafe_allow_html=True)
             st.markdown("---")
 
-    # Main Game Area with Inventory Pop-up Trigger Button
     col_main = st.columns(1)[0]
     with col_main:
         if st.button("🎒 Open Inventory"):
             st.session_state.show_inventory_modal = True
             st.rerun()
 
-        # Trigger the modal conditionally based on flag
         if st.session_state.show_inventory_modal:
             inventory_modal()
             
-        # Display currently selected item if any
         if st.session_state.selected_item:
             sel = st.session_state.selected_item
             info = ITEM_ENCYCLOPEDIA.get(sel, {})
@@ -510,17 +458,22 @@ elif st.session_state.state == "PLAYING":
             
             if st.session_state.show_actions:
                 st.markdown("### Choose Action:")
-                if st.button("⛏️ Dig"):
-                    perform_dig()
-                    st.session_state.show_inventory_modal = False
-                    st.rerun()
+                
+                col_dig, col_popup = st.columns([1, 2])
+                with col_dig:
+                    if st.button("⛏️ Dig"):
+                        perform_dig()
+                        st.session_state.show_inventory_modal = False
+                        st.rerun()
+                with col_popup:
+                    if st.session_state.message and time.time() < st.session_state.message_expiry:
+                        st.markdown(f"<div class='dig-popup'>{st.session_state.message}</div>", unsafe_allow_html=True)
 
         with play_tab2:
             st.markdown("### 🌳 Progression Craft Tree")
             st.markdown("Unlock milestones, upgrade tool efficiencies, and view your caveman advancement tree below:")
             st.markdown("<br>", unsafe_allow_html=True)
 
-            # Feature 1: Compound Dirt Tier
             st.markdown("""
                 <div class="craft-node">
                     <h4>🧱 Tier 1: Compound Foundations</h4>
@@ -529,7 +482,6 @@ elif st.session_state.state == "PLAYING":
                 </div>
             """, unsafe_allow_html=True)
             
-            # Feature 2: Pebble Axe Tier
             st.markdown("""
                 <div class="craft-node">
                     <h4>🪓 Tier 2: Pebble Axe Tool</h4>
@@ -538,12 +490,11 @@ elif st.session_state.state == "PLAYING":
                 </div>
             """, unsafe_allow_html=True)
 
-            # Feature 3: Fine Dirt & Stone Oven Tier
             st.markdown("""
                 <div class="craft-node">
-                    <h4>🔥 Tier 3: Stone Oven & Hearth</h4>
+                    <h4>🔥 Tier 3: Stone Oven & Smelting</h4>
                     <p><b>Requirement:</b> 2x Fine dirt, 10x Pebbles</p>
-                    <p><b>Effect:</b> Unlocks advanced culinary baking and heat processing stations.</p>
+                    <p><b>Effect:</b> Unlocks the Stone Oven to smelt Metal Fragments and Coal into Molten Metal!</p>
                 </div>
             """, unsafe_allow_html=True)
 
@@ -551,14 +502,18 @@ elif st.session_state.state == "PLAYING":
             st.markdown("### 📖 Items Book (Discovery Codex)")
             for item_name, info in ITEM_ENCYCLOPEDIA.items():
                 if st.session_state.inventory.get(item_name, 0) > 0:
+                    item_bg_color = st.session_state.item_custom_colors.get(item_name, info.get("color", "#F0F0F0"))
                     with st.expander(f"✨ {item_name} ({info['rarity']})"):
-                        st.markdown(f"**Owned:** {st.session_state.inventory.get(item_name, 0)}")
-                        st.markdown(f"🎯 **Use:** {info['use']}")
+                        st.markdown(f"""
+                            <div style="background-color: {item_bg_color}; padding: 8px; border-radius: 6px; margin-bottom: 5px;">
+                                <b>Owned:</b> {st.session_state.inventory.get(item_name, 0)}<br>
+                                🎯 <b>Use:</b> {info['use']}
+                            </div>
+                        """, unsafe_allow_html=True)
                 else:
                     with st.container(border=True):
                         st.markdown(f"<span class='item-shadow'>🔒 ???</span>", unsafe_allow_html=True)
 
-    # Auto-refresh mechanism to clear top-right notification after 2 seconds
     if st.session_state.message and time.time() < st.session_state.message_expiry:
         time.sleep(0.5)
         st.rerun()
