@@ -214,6 +214,9 @@ if st.session_state.state == "MENU":
         if st.button("Performance"):
             st.session_state.state = "PERFORMANCE"
             st.rerun()
+        if st.button("Credits"):
+            st.session_state.state = "CREDITS"
+            st.rerun()
 
 elif st.session_state.state == "SETTINGS":
     st.markdown("<h1>⚙️ Interface & Material Color Settings</h1>", unsafe_allow_html=True)
@@ -239,6 +242,15 @@ elif st.session_state.state == "TUTORIAL":
     st.markdown("Click **Open Inventory** in the game arena anytime to view your discovered items! *(Tip: Press **'q'** on your keyboard anytime to open the Admin Panel)*")
     if st.button("🚀 Start Playing!"):
         st.session_state.state = "PLAYING"
+        st.rerun()
+
+elif st.session_state.state == "CREDITS":
+    st.markdown("<h1>🎉 Credits</h1>", unsafe_allow_html=True)
+    st.markdown("<h3>Made By Kai</h3>", unsafe_allow_html=True)
+    st.markdown("---")
+    st.markdown("Thanks for playing Caveman Tycoon!")
+    if st.button("← Back to Menu"):
+        st.session_state.state = "MENU"
         st.rerun()
 
 elif st.session_state.state == "ADMIN":
